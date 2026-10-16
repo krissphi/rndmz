@@ -44,3 +44,19 @@ export interface ShuffleRunData {
   totalSteps: number;
   duration: number; // in ms
 }
+
+export type SortOption =
+  | 'default'
+  | 'name-asc'
+  | 'name-desc'
+  | 'weight-desc'
+  | 'weight-asc'
+  | 'category-asc';
+
+export interface WorkspaceBackup {
+  version: number;
+  exportedAt: number;
+  batches: Batch[];
+  settings?: AppSettings;
+  drawLogs?: DrawLogEntry[];
+}

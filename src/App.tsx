@@ -1,16 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { AppSettings, Batch, DrawLogEntry, Item, RandomizerState, ShuffleRunData } from './types';
+import { AppSettings, Batch, DrawLogEntry, Item, RandomizerState, ShuffleRunData, WorkspaceBackup } from './types';
 import { StorageService } from './services/storage';
 import { RandomizerService } from './services/randomizer';
 import { AnimatorService } from './services/animator';
 import { SoundEffects } from './services/audio';
 import { ConfettiEffect } from './services/confetti';
 
+import { ThemeProvider } from './context/ThemeContext';
+import { LanguageProvider, useTranslation } from './i18n/LanguageContext';
+import { DialogProvider, useDialog } from './context/DialogContext';
+
 import { Header } from './components/Header';
 import { ShuffleCard } from './components/ShuffleCard';
 import { ItemsManager } from './components/ItemsManager';
+import { SettingsModal } from './components/settings/SettingsModal';
+import { HistoryModal } from './components/history/HistoryModal';
 
-export const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { t } = useTranslation();
+  const { toast } = useDialog();
+
   // Batch Persistence
   const [batches, setBatches] = useState<Batch[]>(() => StorageService.loadBatches());
   const [activeBatchId, setActiveBatchId] = useState<string>(() => StorageService.loadActiveBatchId());
@@ -18,6 +27,10 @@ export const App: React.FC = () => {
   // Settings & Draw Logs Persistence
   const [settings, setSettings] = useState<AppSettings>(() => StorageService.loadSettings());
   const [drawLogs, setDrawLogs] = useState<DrawLogEntry[]>(() => StorageService.loadDrawLogs());
+
+  // Modal Dialog states
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // Active Batch resolution
   const activeBatch = useMemo(() => {
@@ -92,6 +105,32 @@ export const App: React.FC = () => {
     [batches, updateBatchesList]
   );
 
+  const handleDuplicateBatch = useCallback(
+    (batchId: string) => {
+      const source = batches.find((b) => b.id === batchId);
+      if (!source) return;
+
+      const duplicatedItems: Item[] = source.items.map((it, idx) => ({
+        ...it,
+        id: `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      }));
+
+      const newBatch: Batch = {
+        id: `batch-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        name: `${source.name} (${t('copySuffix')})`,
+        items: duplicatedItems,
+        drawnIds: [],
+        createdAt: Date.now(),
+      };
+
+      const updated = [...batches, newBatch];
+      updateBatchesList(updated);
+      handleSelectBatch(newBatch.id);
+      toast(t('batchDuplicatedMsg', { name: newBatch.name }), 'success');
+    },
+    [batches, updateBatchesList, handleSelectBatch, t, toast]
+  );
+
   const handleDeleteBatch = useCallback(
     (batchId: string) => {
       if (batches.length <= 1) return;
@@ -102,6 +141,27 @@ export const App: React.FC = () => {
       }
     },
     [batches, activeBatchId, updateBatchesList, handleSelectBatch]
+  );
+
+  const handleRestoreWorkspace = useCallback(
+    (backup: WorkspaceBackup) => {
+      if (backup.batches && backup.batches.length > 0) {
+        setBatches(backup.batches);
+        StorageService.saveBatches(backup.batches);
+        setActiveBatchId(backup.batches[0].id);
+        StorageService.saveActiveBatchId(backup.batches[0].id);
+      }
+      if (backup.settings) {
+        setSettings(backup.settings);
+        StorageService.saveSettings(backup.settings);
+      }
+      if (backup.drawLogs) {
+        setDrawLogs(backup.drawLogs);
+        StorageService.saveDrawLogs(backup.drawLogs);
+      }
+      toast(t('workspaceRestoredSuccess', { count: backup.batches.length }), 'success');
+    },
+    [t, toast]
   );
 
   // Update items for active batch
@@ -195,7 +255,7 @@ export const App: React.FC = () => {
     if (state === 'shuffling') return;
 
     // Validate and prepare sequence using Web Crypto API and weights
-    const { runData, error } = RandomizerService.prepareRun(
+    const runResult = RandomizerService.prepareRun(
       items,
       settings.selectedCategory,
       drawnIds,
@@ -204,11 +264,15 @@ export const App: React.FC = () => {
       displayItem || items[0]
     );
 
-    if (error || !runData) {
-      alert(error || 'Cannot start shuffle with the current selection.');
+    if (runResult.error || !runResult.runData) {
+      const errorMsg = runResult.errorKey
+        ? t(runResult.errorKey, runResult.errorParams)
+        : runResult.error || t('addAtLeastOneItem');
+      toast(errorMsg, 'error');
       return;
     }
 
+    const runData = runResult.runData;
     runDataRef.current = runData;
     prevStepRef.current = -1;
     fanfarePlayedRef.current = false;
@@ -226,14 +290,14 @@ export const App: React.FC = () => {
       );
 
       // On step tick: switch candidate item & play sound
-      if (animState.currentStepIndex !== prevStepRef.current) {
+      if (animState.currentStepIndex !== prevStepRef.current && !animState.isCompleted) {
         const nextItem = runData.sequence[animState.currentStepIndex] || runData.winner;
         setDisplayItem(nextItem);
         setStepIndex(animState.currentStepIndex);
         prevStepRef.current = animState.currentStepIndex;
 
-        if (settings.soundEnabled && !animState.isCompleted) {
-          const pitch = 440 + (1 - animState.progress) * 260;
+        if (settings.soundEnabled) {
+          const pitch = 480 + animState.progress * 220;
           SoundEffects.playTick(pitch);
         }
       }
@@ -292,6 +356,8 @@ export const App: React.FC = () => {
     state,
     activeBatch,
     handleUpdateDrawnIds,
+    t,
+    toast,
   ]);
 
   // Global Keyboard Shortcuts (Space / Enter to shuffle, Esc to reset)
@@ -322,17 +388,12 @@ export const App: React.FC = () => {
   }, [state, handleStartShuffle, handleReset]);
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 flex flex-col font-sans selection:bg-slate-900 selection:text-white transition-all">
-      {/* Top Navbar: Clean branding, confetti & sound toggles */}
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-slate-900 dark:selection:bg-indigo-600 selection:text-white transition-colors duration-200">
+      {/* Top Navbar: Clean branding, language, theme, history & settings triggers */}
       <Header
-        soundEnabled={settings.soundEnabled}
-        onToggleSound={() =>
-          handleUpdateSettings({ ...settings, soundEnabled: !settings.soundEnabled })
-        }
-        confettiEnabled={settings.confettiEnabled}
-        onToggleConfetti={() =>
-          handleUpdateSettings({ ...settings, confettiEnabled: !settings.confettiEnabled })
-        }
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        drawLogsCount={drawLogs.length}
       />
 
       {/* Main Content Area */}
@@ -353,26 +414,56 @@ export const App: React.FC = () => {
           allowRepeatWinners={settings.allowRepeatWinners}
         />
 
-        {/* Items & Configuration Manager with Batches, Stepper, and Logs */}
+        {/* Lightweight, spacious Items Manager (100% focused on batch & item list) */}
         <ItemsManager
           batches={batches}
           activeBatch={activeBatch}
           onSelectBatch={handleSelectBatch}
           onCreateBatch={handleCreateBatch}
           onRenameBatch={handleRenameBatch}
+          onDuplicateBatch={handleDuplicateBatch}
           onDeleteBatch={handleDeleteBatch}
           items={items}
           onUpdateItems={handleUpdateItems}
           settings={settings}
-          onUpdateSettings={handleUpdateSettings}
+          drawLogs={drawLogs}
+          selectedCategory={settings.selectedCategory}
+          onSelectCategory={(cat) => handleUpdateSettings({ ...settings, selectedCategory: cat })}
           drawnIds={drawnIds}
           onResetDrawn={handleResetDrawn}
           onToggleDrawnItem={handleToggleDrawnItem}
-          drawLogs={drawLogs}
-          onClearLogs={handleClearLogs}
+          onRestoreWorkspace={handleRestoreWorkspace}
         />
       </main>
+
+      {/* Settings Modal (Dedicated, spacious dialog for appearance, rules, and sound) */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onUpdateSettings={handleUpdateSettings}
+      />
+
+      {/* History Modal (Dedicated dialog for draw timestamps & logs) */}
+      <HistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        drawLogs={drawLogs}
+        onClearLogs={handleClearLogs}
+      />
     </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <ThemeProvider>
+      <LanguageProvider>
+        <DialogProvider>
+          <AppContent />
+        </DialogProvider>
+      </LanguageProvider>
+    </ThemeProvider>
   );
 };
 

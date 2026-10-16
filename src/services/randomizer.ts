@@ -111,9 +111,18 @@ export class RandomizerService {
     allowRepeat: boolean,
     durationSeconds: number,
     startItem?: Item
-  ): { runData: ShuffleRunData | null; error?: string } {
+  ): {
+    runData: ShuffleRunData | null;
+    error?: string;
+    errorKey?: 'addAtLeastOneItem' | 'noItemsInCategoryMsg' | 'allDrawnMsg';
+    errorParams?: Record<string, string | number>;
+  } {
     if (!items || items.length === 0) {
-      return { runData: null, error: 'Please add at least one item before shuffling.' };
+      return {
+        runData: null,
+        error: 'Please add at least one item before shuffling.',
+        errorKey: 'addAtLeastOneItem',
+      };
     }
 
     const { eligible, totalInCategory, drawnCount } = this.getEligibleItems(
@@ -127,6 +136,8 @@ export class RandomizerService {
       return {
         runData: null,
         error: `No items found in category "${selectedCategory}". Please select another category.`,
+        errorKey: 'noItemsInCategoryMsg',
+        errorParams: { category: selectedCategory },
       };
     }
 
@@ -134,6 +145,8 @@ export class RandomizerService {
       return {
         runData: null,
         error: `All ${drawnCount} item(s) in "${selectedCategory}" have already been drawn! You can enable "Allow Repeat Winners" or reset drawn items.`,
+        errorKey: 'allDrawnMsg',
+        errorParams: { count: drawnCount, category: selectedCategory },
       };
     }
 
