@@ -16,11 +16,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [language, setLanguageState] = useState<Language>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_LANG_KEY);
-      if (saved === 'en' || saved === 'id') return saved;
-      // Auto-detect browser language if Indonesian
-      if (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('id')) {
-        return 'id';
-      }
+      if (saved === 'en') return 'en';
     } catch {
       // ignore
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, RotateCcw, Loader2 } from 'lucide-react';
+import { Play, Loader2 } from 'lucide-react';
 import { Item, RandomizerState } from '../types';
 import { AVAILABLE_FONTS } from '../constants/presets';
 import { useTranslation } from '../i18n/LanguageContext';
@@ -8,7 +8,6 @@ interface ShuffleCardProps {
   currentItem: Item | null;
   state: RandomizerState;
   onStartShuffle: () => void;
-  onReset: () => void;
   containerBgColor: string;
   containerTextColor: string;
   fontFamily: string;
@@ -23,7 +22,6 @@ export const ShuffleCard: React.FC<ShuffleCardProps> = ({
   currentItem,
   state,
   onStartShuffle,
-  onReset,
   containerBgColor,
   containerTextColor,
   fontFamily,
@@ -118,7 +116,7 @@ export const ShuffleCard: React.FC<ShuffleCardProps> = ({
       </div>
 
       {/* Primary Action Controls */}
-      <div className="flex items-center justify-center space-x-3 mt-6">
+      <div className="flex items-center justify-center mt-6">
         <button
           onClick={onStartShuffle}
           disabled={isShuffling || isExhausted || eligibleCount === 0}
@@ -137,19 +135,6 @@ export const ShuffleCard: React.FC<ShuffleCardProps> = ({
             </>
           )}
         </button>
-
-        {(isRevealed || isShuffling) && (
-          <button
-            onClick={onReset}
-            disabled={isShuffling}
-            title={t('resetTooltip')}
-            className="flex items-center space-x-1.5 px-4 py-3.5 rounded-full font-medium text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 border border-slate-200/90 dark:border-slate-700 shadow-xs transition active:scale-95 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-indigo-500"
-            aria-label={t('reset')}
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span>{t('reset')}</span>
-          </button>
-        )}
       </div>
 
       {/* Keyboard Shortcut Hint */}

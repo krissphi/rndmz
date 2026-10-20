@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   ACTIVE_BATCH: 'rndmz_active_batch_id_v4',
   SETTINGS: 'rndmz_settings_v4',
   DRAW_LOGS: 'rndmz_draw_logs_v4',
+  SIDEBAR_OPEN: 'rndmz_sidebar_open_v4',
   OLD_ITEMS: 'rndmz_items_v3',
   OLD_DRAWN: 'rndmz_drawn_ids_v3',
 };
@@ -143,6 +144,39 @@ export const StorageService = {
       localStorage.removeItem(STORAGE_KEYS.DRAW_LOGS);
     } catch (e) {
       console.warn('Failed to clear draw logs', e);
+    }
+  },
+
+  clearBatchDrawLogs(batchId: string): DrawLogEntry[] {
+    try {
+      const current = this.loadDrawLogs();
+      const updated = current.filter((l) => l.batchId !== batchId);
+      this.saveDrawLogs(updated);
+      return updated;
+    } catch (e) {
+      console.warn('Failed to clear batch draw logs', e);
+      return [];
+    }
+  },
+
+  loadSidebarOpen(): boolean {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.SIDEBAR_OPEN);
+      if (data !== null) return JSON.parse(data);
+      if (typeof window !== 'undefined') {
+        return window.innerWidth >= 1024;
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  },
+
+  saveSidebarOpen(isOpen: boolean): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SIDEBAR_OPEN, JSON.stringify(isOpen));
+    } catch (e) {
+      console.warn('Failed to save sidebar open state', e);
     }
   },
 };
